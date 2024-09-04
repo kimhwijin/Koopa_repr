@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.nn as nn
-
+import torch.nn.functional as F
 
 
 class FourierFilter(nn.Module):
@@ -13,13 +13,93 @@ class FourierFilter(nn.Module):
         self.mask_spectrum = mask_spectrum
         
     def forward(self, x):
+        if 'mps' in str(x.device):
+            device = 'mps'
+            x = x.to(torch.device("cpu"))
+        else:
+            device = None
+
         xf = torch.fft.rfft(x, dim=1)
         mask = torch.ones_like(xf)
         mask[:, self.mask_spectrum, :] = 0
+        
         x_var = torch.fft.irfft(xf*mask, dim=1)
         x_inv = x - x_var
         
+        if device == 'mps':
+            x_var = x_var.to('mps')
+            x_inv = x_inv.to('mps')
         return x_var, x_inv
+    
+
+class FourierSelector(nn.Module):
+    def __init__(self, input_len, alpha):
+        super(FourierSelector, self).__init__()
+        
+        self.frequency_size = input_len//2 + 1 
+        self.hidden_size_factor = 1
+        self.scale = 0.02
+        self.alpha = alpha
+        self.w1 = nn.Parameter(self.scale * torch.randn(2, self.frequency_size, self.frequency_size * self.hidden_size_factor))
+        self.b1 = nn.Parameter(self.scale * torch.randn(2, self.frequency_size * self.hidden_size_factor))
+
+        self.w2 = nn.Parameter(self.scale * torch.randn(2, self.frequency_size * self.hidden_size_factor, self.frequency_size))
+        self.b2 = nn.Parameter(self.scale * torch.randn(2, self.frequency_size))
+
+        self.w3 = nn.Parameter(self.scale * torch.randn(2, self.frequency_size, self.frequency_size * self.hidden_size_factor))
+        self.b3 = nn.Parameter(self.scale * torch.randn(2, self.frequency_size * self.hidden_size_factor))
+
+    def forward(self, x):
+        if "mps" in str(x.device):
+            device = 'mps'
+            x = x.to(torch.device('cpu'))
+        else:
+            device = None
+
+        xf = torch.fft.rfft(x, dim=1)
+        xf = xf.permute(0, 2, 1)
+
+        o1_real = F.relu(torch.einsum('bli,ii->bli', xf.real, self.w1[0]) - torch.einsum('bli,ii->bli', xf.imag, self.w1[1]) + self.b1[0])
+        o1_imag = F.relu(torch.einsum('bli,ii->bli', xf.imag, self.w1[0]) + torch.einsum('bli,ii->bli', xf.real, self.w1[1]) + self.b1[1])
+        z1 = torch.stack([o1_real, o1_imag], dim=-1)
+        # z1 = F.softshrink(z1, lambd=self.sparsity_threshold)
+
+        # o2_real = F.relu(torch.einsum('bli,ii->bli', o1_real, self.w2[0]) - torch.einsum('bli,ii->bli', o1_imag, self.w2[1]) + self.b2[0])
+        # o2_imag = F.relu(torch.einsum('bli,ii->bli', o1_imag, self.w2[0]) + torch.einsum('bli,ii->bli', o1_real, self.w2[1]) + self.b2[1])
+        # z2 = torch.stack([o2_real, o2_imag], dim=-1)
+        # z2 = F.softshrink(z2, lambd=self.sparsity_threshold)
+
+        # o3_real = F.relu(torch.einsum('bli,ii->bli', o2_real, self.w3[0]) - torch.einsum('bli,ii->bli', o2_imag, self.w3[1]) + self.b3[0])
+        # o3_imag = F.relu(torch.einsum('bli,ii->bli', o2_imag, self.w3[0]) + torch.einsum('bli,ii->bli', o2_real, self.w3[1]) + self.b3[1])
+        # z3 = torch.stack([o3_real, o3_imag], dim=-1)
+        # z3 = F.softshrink(z3, lambd=self.sparsity_threshold)
+
+        logits = torch.view_as_complex(z1)
+        logits = abs(logits).permute(0, 2, 1)
+        # Gumbel Softmax (Hard)
+
+
+        gumbels = (
+            -torch.empty_like(logits, memory_format=torch.legacy_contiguous_format).exponential_().log()
+        )  # ~Gumbel(0,1)
+        gumbels = (logits + gumbels) / 0.5  # ~Gumbel(logits,tau)
+        y_soft = gumbels.softmax(dim=1)
+        index = y_soft.argsort(dim=1, descending=True)[:, :int(self.frequency_size*self.alpha), :]
+        y_hard = torch.zeros_like(logits, memory_format=torch.legacy_contiguous_format).scatter_(1, index, 1.0)
+        mask = (y_hard - y_soft).detach() + y_soft
+        # indices = y_soft.topk(int(self.frequency_size * (1-self.alpha)), dim=1, largest=False).indices
+        # masked = y_soft.scatter(dim=1, index=indices, value=0.)
+        # x_masked = (masked - y_soft).detach() + y_soft
+        xf = xf.permute(0, 2, 1)
+
+        x_inv = torch.fft.irfft(xf*mask, dim=1)
+        x_var = x - x_inv
+
+        if device == 'mps':
+            x_var = x_var.to('mps')
+            x_inv = x_inv.to('mps')
+            entropy = (-y_soft * y_soft.log()).sum(dim=1).mean(dim=-1).to('mps')
+        return x_var, x_inv,  entropy
     
 
 class MLP(nn.Module):
@@ -77,7 +157,16 @@ class KPLayer(nn.Module):
         x, y = z[:, :-1], z[:, 1:]
 
         # solve linear system
-        self.K = torch.linalg.lstsq(x, y).solution # B E E
+        if 'mps' in str(x.device):
+            device = 'mps'
+        else:
+            device = None
+        
+        if device == 'mps':
+            self.K = torch.linalg.lstsq(x.to('cpu'), y.to('cpu')).solution.to('mps')
+        else:
+            self.K = torch.linalg.lstsq(x, y).solution # B E E
+    
         if torch.isnan(self.K).any():
             print('Encounter K with nan, replace K by identity matrix')
             self.K = torch.eye(self.K.shape[1]).to(self.K.device).unsqueeze(0).repeat(B, 1, 1)
@@ -249,9 +338,13 @@ class Model(nn.Module):
         self.hidden_dim = configs.hidden_dim
         self.hidden_layers = configs.hidden_layers
         self.multistep = configs.multistep
+        self.fourier = configs.fourier
 
-        self.disentanglement = FourierFilter(self.mask_spectrum)
-
+        if self.fourier == 'filter':
+            self.disentanglement = FourierFilter(self.mask_spectrum)
+        elif self.fourier == 'select':
+            self.disentanglement = FourierSelector(self.input_len, configs.alpha)
+        
         # shared encoder/decoder to make koopman embedding consistent
         self.time_inv_encoder = MLP(f_in=self.input_len, f_out=self.dynamic_dim, activation='relu',
                     hidden_dim=self.hidden_dim, hidden_layers=self.hidden_layers)
@@ -293,7 +386,10 @@ class Model(nn.Module):
         # Koopman Forecasting
         residual, forecast = x_enc, None
         for i in range(self.num_blocks):
-            time_var_input, time_inv_input = self.disentanglement(residual)
+            if self.fourier == 'filter':
+                time_var_input, time_inv_input = self.disentanglement(residual)
+            elif self.fourier == 'select':
+                time_var_input, time_inv_input, fourier_dist = self.disentanglement(residual)
             time_inv_output = self.time_inv_kps[i](time_inv_input)
             time_var_backcast, time_var_output = self.time_var_kps[i](time_var_input)
             residual = residual - time_var_backcast
@@ -303,6 +399,8 @@ class Model(nn.Module):
                 forecast += (time_inv_output + time_var_output)
 
         # Series Stationarization adopted from NSformer
-        res = forecast * std_enc + mean_enc
-
+        if self.fourier == 'filter':
+            res = forecast * std_enc + mean_enc
+        elif self.fourier == 'select':
+            res = forecast * std_enc + mean_enc, fourier_dist
         return res

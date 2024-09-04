@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch import optim
-
+import torch.nn.functional as F
 import os
 import time
 
@@ -21,7 +21,9 @@ warnings.filterwarnings('ignore')
 class Exp_Main(Exp_Basic):
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
-
+        if args.fourier == 'select':
+            if str(self.device) == 'mps':
+                self.model.disentanglement.to('cpu')
     def _get_mask_spectrum(self):
         """
         get shared frequency spectrums
@@ -33,6 +35,8 @@ class Exp_Main(Exp_Basic):
             amps += abs(torch.fft.rfft(lookback_window, dim=1)).mean(dim=0).mean(dim=1)
 
         mask_spectrum = amps.topk(int(amps.shape[0]*self.args.alpha)).indices
+        print("Mask spectrum :", mask_spectrum.shape)
+        
         return mask_spectrum # as the spectrums of time-invariant component
 
     def _build_model(self):
@@ -77,15 +81,21 @@ class Exp_Main(Exp_Basic):
                     with torch.cuda.amp.autocast():
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 else:
-                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    if self.args.fourier == 'filter':
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    elif self.args.fourier == 'select':
+                        outputs, entropy = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
                 batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
-
-                loss = criterion(pred, true)
+                if self.args.fourier == 'filter':
+                    loss = criterion(pred, true)
+                elif self.args.fourier == 'select':
+                    loss = criterion(pred, true) + 0.1 * entropy.mean()
 
                 total_loss.append(loss)
         total_loss = np.average(total_loss)
@@ -142,12 +152,19 @@ class Exp_Main(Exp_Basic):
                         loss = criterion(outputs, batch_y)
                         train_loss.append(loss.item())
                 else:
-                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    if self.args.fourier == 'filter':
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    elif self.args.fourier == 'select':
+                        outputs, entropy = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
                     f_dim = -1 if self.args.features == 'MS' else 0
                     outputs = outputs[:, -self.args.pred_len:, f_dim:]
                     batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
-                    loss = criterion(outputs, batch_y)
+                    if self.args.fourier == 'filter':
+                        loss = criterion(outputs, batch_y)
+                    elif self.args.fourier == 'select':
+                        loss = criterion(outputs, batch_y) + 0.1 * entropy.mean()
+                    
                     train_loss.append(loss.item())
 
                 if (i + 1) % 100 == 0:
@@ -214,7 +231,10 @@ class Exp_Main(Exp_Basic):
                     with torch.cuda.amp.autocast():
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 else:
-                    outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    if self.args.fourier == 'filter':
+                        outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
+                    elif self.args.fourier == 'select':
+                        outputs, entropy = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]

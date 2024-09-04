@@ -65,35 +65,69 @@ parser.add_argument('--seg_len', type=int, default=48, help='segment length of t
 parser.add_argument('--num_blocks', type=int, default=3, help='number of Koopa blocks')
 parser.add_argument('--alpha', type=float, default=0.2, help='spectrum filter ratio')
 parser.add_argument('--multistep', action='store_true', help='whether to use approximation for multistep K', default=False)
-
+parser.add_argument('--fourier', type=str, default='filter', help='time disentangled')
 
 args = parser.parse_args()
 
-args.use_gpu = True if torch.cuda.is_available() and args.use_gpu else False
-
+args.use_gpu = True if (torch.cuda.is_available() or torch.backends.mps.is_available()) and args.use_gpu else False
+args.num_workers = 2
 fix_seed = args.seed
 random.seed(fix_seed)
 torch.manual_seed(fix_seed)
 np.random.seed(fix_seed)
 
 if args.use_gpu:
-    if args.use_multi_gpu:
-        args.devices = args.devices.replace(' ', '')
-        device_ids = args.devices.split(',')
-        args.device_ids = [int(id_) for id_ in device_ids]
-        args.gpu = args.device_ids[0]
+    if torch.cuda.is_available():
+        if args.use_multi_gpu:
+            args.devices = args.devices.replace(' ', '')
+            device_ids = args.devices.split(',')
+            args.device_ids = [int(id_) for id_ in device_ids]
+            args.gpu = args.device_ids[0]
+        else:
+            torch.cuda.set_device(args.gpu)
+
+
+if __name__ == '__main__':
+    print('Args in experiment:')
+    print(args)
+
+    Exp = Exp_Main
+
+    if args.is_training:
+        for ii in range(args.itr):
+            # setting record of experiments
+            setting = '{}_{}_{}_ft{}_sl{}_pl{}_segl{}_dyna{}_h{}_l{}_nb{}_a{}_{}_{}_{}'.format(
+                args.model_id,
+                args.model,
+                args.data,
+                args.features,
+                args.seq_len,
+                args.pred_len,
+                args.seg_len,
+                args.dynamic_dim,
+                args.hidden_dim,
+                args.hidden_layers,
+                args.num_blocks,
+                args.alpha,
+                args.des, 
+                args.fourier,
+                ii)
+
+            exp = Exp(args)  # set experiments
+            print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
+            exp.train(setting)
+
+            print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+            exp.test(setting)
+
+            if args.do_predict:
+                print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
+                exp.predict(setting, True)
+
+            torch.cuda.empty_cache()
     else:
-        torch.cuda.set_device(args.gpu)
-
-print('Args in experiment:')
-print(args)
-
-Exp = Exp_Main
-
-if args.is_training:
-    for ii in range(args.itr):
-        # setting record of experiments
-        setting = '{}_{}_{}_ft{}_sl{}_pl{}_segl{}_dyna{}_h{}_l{}_nb{}_a{}_{}_{}'.format(
+        ii = 0
+        setting = '{}_{}_{}_ft{}_sl{}_pl{}_segl{}_dyna{}_h{}_l{}_nb{}_a{}_{}_{}_{}'.format(
             args.model_id,
             args.model,
             args.data,
@@ -106,38 +140,11 @@ if args.is_training:
             args.hidden_layers,
             args.num_blocks,
             args.alpha,
-            args.des, ii)
+            args.des, 
+            args.fourier,
+            ii)
 
         exp = Exp(args)  # set experiments
-        print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
-        exp.train(setting)
-
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-        exp.test(setting)
-
-        if args.do_predict:
-            print('>>>>>>>predicting : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-            exp.predict(setting, True)
-
+        exp.test(setting, test=1)
         torch.cuda.empty_cache()
-else:
-    ii = 0
-    setting = '{}_{}_{}_ft{}_sl{}_pl{}_segl{}_dyna{}_h{}_l{}_nb{}_a{}_{}_{}'.format(
-        args.model_id,
-        args.model,
-        args.data,
-        args.features,
-        args.seq_len,
-        args.pred_len,
-        args.seg_len,
-        args.dynamic_dim,
-        args.hidden_dim,
-        args.hidden_layers,
-        args.num_blocks,
-        args.alpha,
-        args.des, ii)
-
-    exp = Exp(args)  # set experiments
-    print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
-    exp.test(setting, test=1)
-    torch.cuda.empty_cache()

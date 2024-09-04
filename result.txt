@@ -22,3 +22,57 @@ mse:0.3328983187675476, mae:0.380306601524353
 ETTh2_384_192_Koopa_ETTh2_ftM_sl384_pl192_segl192_dyna64_h64_l2_nb1_a0.2_Exp_0  
 mse:0.3603716194629669, mae:0.3991495668888092
 
+traffic_96_48_Koopa_custom_ftM_sl96_pl48_segl48_dyna512_h256_l3_nb1_a0.2_Exp_0  
+mse:0.4351542890071869, mae:0.2892557382583618
+
+traffic_192_96_Koopa_custom_ftM_sl192_pl96_segl96_dyna64_h128_l2_nb3_a0.2_Exp_0  
+mse:0.4288722574710846, mae:0.3067699074745178
+
+traffic_288_144_Koopa_custom_ftM_sl288_pl144_segl144_dyna128_h128_l2_nb1_a0.2_Exp_0  
+mse:0.4261326491832733, mae:0.3044528067111969
+
+traffic_384_192_Koopa_custom_ftM_sl384_pl192_segl192_dyna128_h128_l2_nb1_a0.2_Exp_0  
+mse:0.43153059482574463, mae:0.30925706028938293
+
+weather_96_48_Koopa_custom_ftM_sl96_pl48_segl48_dyna128_h64_l2_nb4_a0.2_Exp_0  
+mse:0.12471489608287811, mae:0.16610461473464966
+
+weather_192_96_Koopa_custom_ftM_sl192_pl96_segl96_dyna64_h128_l3_nb2_a0.2_Exp_0  
+mse:0.15744872391223907, mae:0.20664113759994507
+
+weather_288_144_Koopa_custom_ftM_sl288_pl144_segl144_dyna128_h64_l2_nb2_a0.2_Exp_0  
+mse:0.17108401656150818, mae:0.2229684442281723
+
+weather_384_192_Koopa_custom_ftM_sl384_pl192_segl192_dyna128_h64_l2_nb3_a0.2_Exp_0  
+mse:0.19796136021614075, mae:0.24670755863189697
+
+ili_48_24_Koopa_custom_ftM_sl48_pl24_segl24_dyna128_h512_l2_nb4_a0.2_Exp_0  
+mse:2.05338454246521, mae:0.8779964447021484
+
+ili_72_36_Koopa_custom_ftM_sl72_pl36_segl36_dyna512_h512_l3_nb3_a0.2_Exp_0  
+mse:1.8448007106781006, mae:0.8984514474868774
+
+ili_96_48_Koopa_custom_ftM_sl96_pl48_segl48_dyna256_h512_l2_nb2_a0.2_Exp_0  
+mse:1.9046735763549805, mae:0.9248068332672119
+
+ili_120_60_Koopa_custom_ftM_sl120_pl60_segl60_dyna64_h256_l4_nb3_a0.2_Exp_0  
+mse:1.8385614156723022, mae:0.8840022087097168
+
+Exchange_96_48_Koopa_custom_ftM_sl96_pl48_segl48_dyna128_h256_l3_nb4_a0.2_Exp_0  
+mse:0.0447709746658802, mae:0.1478828638792038
+
+Exchange_192_96_Koopa_custom_ftM_sl192_pl96_segl96_dyna64_h64_l3_nb4_a0.2_Exp_0  
+mse:0.08570925146341324, mae:0.2091037929058075
+
+Exchange_288_144_Koopa_custom_ftM_sl288_pl144_segl144_dyna512_h64_l2_nb2_a0.2_Exp_0  
+mse:0.15056875348091125, mae:0.27963629364967346
+
+Exchange_384_192_Koopa_custom_ftM_sl384_pl192_segl192_dyna64_h128_l3_nb2_a0.2_Exp_0  
+mse:0.20579670369625092, mae:0.33107057213783264
+
+ECL_96_48_Koopa_custom_ftM_sl96_pl48_segl48_dyna256_h512_l3_nb3_a0.2_Exp_select_0  
+mse:0.2728833258152008, mae:0.36700358986854553
+
+ECL_192_96_Koopa_custom_ftM_sl192_pl96_segl96_dyna128_h512_l3_nb1_a0.2_Exp_select_0  
+mse:0.18008333444595337, mae:0.2825876772403717
+
